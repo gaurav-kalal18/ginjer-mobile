@@ -238,6 +238,37 @@ export default function Devices() {
       />
 
       <ModeSwitch demo={demo} onChange={setDemo} />
+      
+<Pressable
+  style={styles.automationShortcut}
+  onPress={() => router.push('/automations')}
+  accessibilityRole="button"
+  accessibilityLabel="Open Automations"
+>
+  <View style={styles.automationIcon}>
+    <Ionicons
+      name="git-branch-outline"
+      size={23}
+      color={C.greenDark}
+    />
+  </View>
+
+  <View style={styles.automationInfo}>
+    <Text style={styles.automationTitle}>
+      Automations
+    </Text>
+    <Text style={styles.automationSubtitle}>
+      Manage device rules and actions
+    </Text>
+  </View>
+
+  <Ionicons
+    name="chevron-forward"
+    size={20}
+    color={C.greenDark}
+  />
+</Pressable>
+
 
       <View style={styles.searchBar}>
         <Ionicons name="search-outline" size={21} color={C.muted} />
@@ -626,4 +657,38 @@ const styles = StyleSheet.create({
     maxWidth: 78,
     textAlign: 'right',
   },
+  
+  automationShortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.white,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 15,
+    padding: 14,
+    marginBottom: 18,
+    gap: 12,
+  },
+  automationIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: C.greenPale,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  automationInfo: {
+    flex: 1,
+  },
+  automationTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: C.ink,
+  },
+  automationSubtitle: {
+    fontSize: 12,
+    color: C.muted,
+    marginTop: 4,
+  },
+
 });
