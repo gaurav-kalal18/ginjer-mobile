@@ -7,6 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Modal,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,11 +23,29 @@ import { useData } from '../../hooks/useData';
 import { ProjectDevices, Q } from '../../lib/api';
 import { demoDevices } from '../../lib/demo-devices';
 import { useSession } from '../../lib/session';
-import BusylightControl from '../../components/devices/BusylightControl';
+import BusylightControl, {
+  LightColor,
+} from '../../components/devices/BusylightControl';
+
+const COLOR_OPTIONS: {
+  name: LightColor;
+  hex: string;
+}[] = [
+  { name: 'Red', hex: '#EF4444' },
+  { name: 'Blue', hex: '#3B82F6' },
+  { name: 'Green', hex: '#86B817' },
+  { name: 'Off', hex: '#9CA3AF' },
+];
 
 export default function DeviceDetails() {
   const { user } = useSession();
+
   const [downlinkOpen, setDownlinkOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [selectedColor, setSelectedColor] =
+    useState<LightColor | null>(null);
+  const [appliedColor, setAppliedColor] =
+    useState<LightColor>('Off');
 
   const p = useLocalSearchParams<{
     id: string;
@@ -62,6 +81,11 @@ export default function DeviceDetails() {
 
   const device = demoDevice || liveDevice;
 
+  const isBusylight =
+    !!device &&
+    (device.name.toLowerCase().includes('busylight') ||
+      (isDemo && demoDevice?.hardwareType === 'light'));
+
   const information = device
     ? [
         ['Device EUI', device.devEui],
@@ -72,12 +96,44 @@ export default function DeviceDetails() {
             ? demoDevice.lastHeard
             : liveDevice?.timestamp,
         ],
-        [
-          'Location',
-          liveDevice?.position?.placeName,
-        ],
+        ['Location', liveDevice?.position?.placeName],
       ]
     : [];
+
+  const closeSheet = () => {
+    setDownlinkOpen(false);
+    setDropdownOpen(false);
+  };
+
+  const openSheet = () => {
+    setSelectedColor(null);
+    setDropdownOpen(false);
+    setDownlinkOpen(true);
+  };
+
+  const sendDemoCommand = () => {
+    if (!selectedColor || !isBusylight) return;
+
+    if (!isDemo) {
+      Alert.alert(
+        'Live Control Not Enabled',
+        'We must verify the Ginjer hardware command payload before sending real downlinks.'
+      );
+      return;
+    }
+
+    setAppliedColor(selectedColor);
+    closeSheet();
+
+    Alert.alert(
+      'Demo Downlink Sent',
+      `Busylight colour changed to ${selectedColor} in simulation only. No physical command was sent.`
+    );
+  };
+
+  const previewHex =
+    COLOR_OPTIONS.find(c => c.name === selectedColor)?.hex ??
+    '#9CA3AF';
 
   return (
     <>
@@ -113,7 +169,7 @@ export default function DeviceDetails() {
               <View style={styles.iconBox}>
                 <Ionicons
                   name={
-                    demoDevice?.hardwareType === 'light'
+                    isBusylight
                       ? 'bulb-outline'
                       : 'hardware-chip-outline'
                   }
@@ -150,7 +206,6 @@ export default function DeviceDetails() {
               <Text style={styles.section}>
                 Device information
               </Text>
-
               {information.map(([label, value]) => (
                 <View key={label} style={styles.row}>
                   <Text style={styles.label}>{label}</Text>
@@ -161,19 +216,21 @@ export default function DeviceDetails() {
               ))}
             </Panel>
 
-            <Pressable
-              style={styles.downlinkButton}
-              onPress={() => setDownlinkOpen(true)}
-            >
-              <Ionicons
-                name="cloud-upload-outline"
-                size={20}
-                color="#FFFFFF"
-              />
-              <Text style={styles.downlinkButtonText}>
-                Send Downlink
-              </Text>
-            </Pressable>
+            {isBusylight && (
+              <Pressable
+                style={styles.downlinkButton}
+                onPress={openSheet}
+              >
+                <Ionicons
+                  name="cloud-upload-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.downlinkButtonText}>
+                  Send Downlink
+                </Text>
+              </Pressable>
+            )}
 
             {demoDevice ? (
               <>
@@ -221,8 +278,12 @@ export default function DeviceDetails() {
                   </View>
                 </Panel>
 
-                {demoDevice.hardwareType === 'light' && (
-                  <BusylightControl mode="demo" />
+                {isBusylight && (
+                  <BusylightControl
+                    mode="demo"
+                    appliedColor={appliedColor}
+                    onDemoColorChange={setAppliedColor}
+                  />
                 )}
               </>
             ) : (
@@ -277,12 +338,10 @@ export default function DeviceDetails() {
                   )}
                 </Panel>
 
-                {liveDevice?.name
-                  ?.toLowerCase()
-                  .includes('busylight') ? (
+                {isBusylight ? (
                   <BusylightControl
                     mode="live"
-                    deviceId={liveDevice._id}
+                    deviceId={liveDevice?._id}
                     organisationId={p.organisationId}
                     token={user?.token}
                   />
@@ -306,12 +365,12 @@ export default function DeviceDetails() {
         visible={downlinkOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setDownlinkOpen(false)}
+        onRequestClose={closeSheet}
       >
         <View style={styles.modalOverlay}>
           <Pressable
             style={styles.modalBackdrop}
-            onPress={() => setDownlinkOpen(false)}
+            onPress={closeSheet}
           />
 
           <View style={styles.bottomSheet}>
@@ -333,40 +392,96 @@ export default function DeviceDetails() {
               />
             </View>
 
-            <Text style={styles.sheetLabel}>
-              Device
-            </Text>
+            <Text style={styles.sheetLabel}>Device</Text>
 
             <View style={styles.sheetField}>
               <Text style={styles.sheetFieldText}>
                 {device?.name || 'Device'}
               </Text>
               <Ionicons
-                name="chevron-down"
+                name="hardware-chip-outline"
                 size={18}
                 color={C.greenDark}
               />
             </View>
 
-            <Text style={styles.sheetLabel}>
-              Command
-            </Text>
+            <Text style={styles.sheetLabel}>Command</Text>
 
-            <View style={styles.sheetField}>
-              <Text style={styles.sheetPlaceholder}>
-                Select command
+            <Pressable
+              style={styles.sheetField}
+              onPress={() => setDropdownOpen(v => !v)}
+            >
+              <Text
+                style={
+                  selectedColor
+                    ? styles.sheetFieldText
+                    : styles.sheetPlaceholder
+                }
+              >
+                {selectedColor
+                  ? `Set Colour — ${selectedColor}`
+                  : 'Select command'}
               </Text>
               <Ionicons
-                name="chevron-down"
+                name={
+                  dropdownOpen
+                    ? 'chevron-up'
+                    : 'chevron-down'
+                }
                 size={18}
                 color={C.greenDark}
               />
+            </Pressable>
+
+            {dropdownOpen && (
+              <View style={styles.dropdown}>
+                {COLOR_OPTIONS.map(color => (
+                  <Pressable
+                    key={color.name}
+                    style={styles.dropdownOption}
+                    onPress={() => {
+                      setSelectedColor(color.name);
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: color.hex },
+                      ]}
+                    />
+                    <Text style={styles.dropdownText}>
+                      {color.name}
+                    </Text>
+                    {selectedColor === color.name && (
+                      <Ionicons
+                        name="checkmark"
+                        size={18}
+                        color={C.greenDark}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.lightPreview}>
+              <Ionicons
+                name="bulb"
+                size={58}
+                color={previewHex}
+              />
+              <Text style={styles.previewLabel}>
+                {selectedColor
+                  ? `Selected: ${selectedColor}`
+                  : 'Choose a colour'}
+              </Text>
             </View>
 
             <View style={styles.sheetActions}>
               <Pressable
                 style={styles.cancelButton}
-                onPress={() => setDownlinkOpen(false)}
+                onPress={closeSheet}
               >
                 <Text style={styles.cancelText}>
                   Cancel
@@ -374,18 +489,22 @@ export default function DeviceDetails() {
               </Pressable>
 
               <Pressable
-                style={styles.sendButtonDisabled}
-                disabled
+                style={[
+                  styles.sendButton,
+                  (!selectedColor || !isDemo) &&
+                    styles.sendButtonDisabled,
+                ]}
+                disabled={!selectedColor || !isDemo}
+                onPress={sendDemoCommand}
               >
-                <Text style={styles.sendText}>
-                  Send
-                </Text>
+                <Text style={styles.sendText}>Send</Text>
               </Pressable>
             </View>
 
             <Text style={styles.sheetNote}>
-              Command selection will be connected in the
-              next step. No hardware commands are sent yet.
+              {isDemo
+                ? 'Demo Mode — no physical hardware commands are sent.'
+                : 'Live commands disabled until the hardware payload is verified.'}
             </Text>
           </View>
         </View>
@@ -577,19 +696,59 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    gap: 8,
   },
   sheetFieldText: {
     color: '#1F2D28',
     fontSize: 14,
+    flexShrink: 1,
   },
   sheetPlaceholder: {
     color: '#9CA3AF',
     fontSize: 14,
   },
+  dropdown: {
+    borderWidth: 1,
+    borderColor: '#E5E7E3',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    marginTop: -8,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F3EF',
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2D28',
+    fontWeight: '600',
+  },
+  colorDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+  lightPreview: {
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  previewLabel: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#808783',
+  },
   sheetActions: {
     flexDirection: 'row',
     gap: 14,
-    marginTop: 35,
+    marginTop: 16,
   },
   cancelButton: {
     flex: 1,
@@ -603,12 +762,15 @@ const styles = StyleSheet.create({
     color: C.greenDark,
     fontWeight: '800',
   },
-  sendButtonDisabled: {
+  sendButton: {
     flex: 1,
-    backgroundColor: '#B2D17E',
+    backgroundColor: '#86B817',
     borderRadius: 11,
     paddingVertical: 15,
     alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    backgroundColor: '#B2D17E',
     opacity: 0.65,
   },
   sendText: {

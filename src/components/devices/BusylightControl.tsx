@@ -6,17 +6,18 @@ import {
   Pressable,
   StyleSheet,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-type LightColor = 'Red' | 'Blue' | 'Green' | 'Off';
+export type LightColor = 'Red' | 'Blue' | 'Green' | 'Off';
 
 type Props = {
   mode?: 'demo' | 'live';
   deviceId?: string;
   organisationId?: string;
   token?: string;
+  appliedColor?: LightColor;
+  onDemoColorChange?: (color: LightColor) => void;
 };
 
 const COLORS: { name: LightColor; hex: string }[] = [
@@ -26,137 +27,42 @@ const COLORS: { name: LightColor; hex: string }[] = [
   { name: 'Off', hex: '#9CA3AF' },
 ];
 
-const API_URL =
-  process.env.EXPO_PUBLIC_GINJER_API_URL ||
-  'https://devapi.ginjer.io/graphql';
-
-// Identified from the Ginjer Module List.
-const COLOR_INTERFACE_ID = '62853f132491a543a7f99384';
-
-// Enable only after the colour command JSON has been verified.
-const LIVE_COMMANDS_ENABLED = false;
-
-// Placeholder for the verified hardware-specific payload.
-// Do not guess the JSON structure.
-function buildColorPayload(
-  color: LightColor
-): Record<string, unknown> {
-  throw new Error(
-    `Colour payload for ${color} has not been verified.`
-  );
-}
-
-const DOWNLINK_QUERY = `
-  query SendDownlink($action: SendDownlinkInput!) {
-    sendDownlink(action: $action) {
-      timestamp
-      type
-      message
-    }
-  }
-`;
-
 export default function BusylightControl({
   mode = 'demo',
-  deviceId,
-  organisationId,
-  token,
+  appliedColor,
+  onDemoColorChange,
 }: Props) {
   const [selected, setSelected] = useState<LightColor>('Off');
-  const [applied, setApplied] = useState<LightColor>('Off');
-  const [sending, setSending] = useState(false);
+  const [localApplied, setLocalApplied] =
+    useState<LightColor>('Off');
 
   const isDemo = mode === 'demo';
+  const applied = appliedColor ?? localApplied;
 
-  const applyColor = async () => {
-    if (sending) return;
-
-    if (isDemo) {
-      setApplied(selected);
-      Alert.alert(
-        'Demo Mode',
-        `Busylight colour changed to ${selected} in simulation only. No hardware command was sent.`
-      );
-      return;
-    }
-
-    if (!LIVE_COMMANDS_ENABLED) {
+  const applyColor = () => {
+    if (!isDemo) {
       Alert.alert(
         'Live Control Not Enabled',
-        'The colour command payload must be verified with the hackathon organizers before real hardware commands can be sent.'
+        'The hardware command payload must be verified with the organisers before real commands can be sent.'
       );
       return;
     }
 
-    if (!deviceId || !organisationId || !token) {
-      Alert.alert(
-        'Missing Device Information',
-        'Device ID, organization ID, or authentication is missing.'
-      );
-      return;
-    }
+    setLocalApplied(selected);
+    onDemoColorChange?.(selected);
 
-    setSending(true);
-
-    try {
-      const value = buildColorPayload(selected);
-
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          authorization: token,
-        },
-        body: JSON.stringify({
-          query: DOWNLINK_QUERY,
-          variables: {
-            action: {
-              deviceId,
-              organisationId,
-              downlinkInterfaceId: COLOR_INTERFACE_ID,
-              value,
-            },
-          },
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || result.errors?.length) {
-        throw new Error(
-          result.errors?.[0]?.message ||
-          `Server error: ${response.status}`
-        );
-      }
-
-      if (!result.data?.sendDownlink) {
-        throw new Error('No downlink confirmation returned.');
-      }
-
-      Alert.alert(
-        'Command Submitted',
-        `Ginjer accepted the ${selected} command. Verify the physical Busylight to confirm the colour changed.`
-      );
-
-      // Do not update applied here: API acceptance does not
-      // confirm that the physical light changed colour.
-    } catch (error: any) {
-      Alert.alert(
-        'Command Failed',
-        error?.message || 'Unable to send command.'
-      );
-    } finally {
-      setSending(false);
-    }
+    Alert.alert(
+      'Demo Mode',
+      `Busylight changed to ${selected} in simulation only. No hardware command was sent.`
+    );
   };
 
   const activeColor =
-    COLORS.find(c => c.name === applied)?.hex || '#9CA3AF';
+    COLORS.find(c => c.name === applied)?.hex ?? '#9CA3AF';
 
   return (
     <View style={styles.card}>
       <Text style={styles.title}>Busylight Control</Text>
-
       <Text style={styles.subtitle}>
         Select a colour for your Busylight
       </Text>
@@ -167,7 +73,6 @@ export default function BusylightControl({
           size={65}
           color={isDemo ? activeColor : '#9CA3AF'}
         />
-
         <Text style={styles.previewText}>
           {isDemo
             ? `Current simulated colour: ${applied}`
@@ -179,7 +84,6 @@ export default function BusylightControl({
         {COLORS.map(color => (
           <Pressable
             key={color.name}
-            disabled={sending}
             onPress={() => setSelected(color.name)}
             style={[
               styles.colorButton,
@@ -200,28 +104,18 @@ export default function BusylightControl({
       </View>
 
       <Pressable
-        style={[
-          styles.applyButton,
-          sending && { opacity: 0.6 },
-        ]}
-        disabled={sending}
+        style={styles.applyButton}
         onPress={applyColor}
       >
-        {sending ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text style={styles.applyText}>
-            Apply {selected}
-          </Text>
-        )}
+        <Text style={styles.applyText}>
+          Apply {selected}
+        </Text>
       </Pressable>
 
       <Text style={styles.demoNote}>
         {isDemo
           ? 'Demo only — no commands are sent to physical hardware.'
-          : LIVE_COMMANDS_ENABLED
-            ? 'Live API — commands will be sent to the selected device.'
-            : 'Live API — hardware commands disabled until payload verification.'}
+          : 'Live API — hardware commands disabled until payload verification.'}
       </Text>
     </View>
   );
