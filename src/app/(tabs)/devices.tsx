@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -34,11 +33,16 @@ type ListDevice = {
 };
 
 export default function Devices() {
-  const { user, org, selectOrg } = useSession();
+  const {
+    user,
+    org,
+    selectOrg,
+    selectedProject,
+    selectProject,
+  } = useSession();
 
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
   const [clusters, setClusters] = useState<ProjectDevices['clusters']>([]);
 
   const [demo, setDemo] = useState(false);
@@ -67,33 +71,40 @@ export default function Devices() {
         if (!alive) return;
 
         const list = (data.accounts || []).filter(
-          x => x.isActive && x.isAccepted
+          item => item.isActive && item.isAccepted
         );
 
         setOrgs(list);
 
-        if (!org && list.length) {
-          selectOrg(
+        if (!org && list.length > 0) {
+          const defaultOrg =
             list.find(
-              x => x.organisationId === user.organisationId
-            ) || list[0]
+              item => item.organisationId === user.organisationId
+            ) || list[0];
+
+          selectOrg(defaultOrg);
+        }
+      } catch (e: unknown) {
+        if (alive) {
+          setError(
+            e instanceof Error ? e.message : 'Unable to load organizations'
           );
         }
-      } catch (e: any) {
-        if (alive) setError(e.message);
       }
     }
 
     loadOrgs();
-    return () => { alive = false; };
-  }, [user?.token, refreshKey]);
 
-  // Load projects
+    return () => {
+      alive = false;
+    };
+  }, [user?.token, user?.organisationId, refreshKey]);
+
+  // Load projects for the selected organization
   useEffect(() => {
     let alive = true;
 
     setProjects([]);
-    setProject(null);
     setClusters([]);
 
     if (!org || !user) {
@@ -108,33 +119,58 @@ export default function Devices() {
       try {
         const data = await gql<{ projectOverview: Project[] }>(
           Q.projects,
-          { params: { organisationId: org!.organisationId } },
+          {
+            params: {
+              organisationId: org!.organisationId,
+            },
+          },
           user!.token
         );
 
         if (!alive) return;
 
         const list = data.projectOverview || [];
+
         setProjects(list);
-        setProject(list[0] || null);
-      } catch (e: any) {
-        if (alive) setError(e.message);
+
+        // Keep the current project if it belongs to this organization.
+        // Otherwise, select the first available project.
+        if (
+          !selectedProject ||
+          !list.some(item => item._id === selectedProject._id)
+        ) {
+          selectProject(list[0] || null);
+        }
+      } catch (e: unknown) {
+        if (alive) {
+          setError(
+            e instanceof Error ? e.message : 'Unable to load projects'
+          );
+        }
       } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setLoading(false);
+        }
       }
     }
 
     loadProjects();
-    return () => { alive = false; };
+
+    return () => {
+      alive = false;
+    };
   }, [org?.organisationId, user?.token, refreshKey]);
 
-  // Load real devices
+  // Load devices for the selected project
   useEffect(() => {
     let alive = true;
 
     setClusters([]);
 
-    if (!org || !project || !user) return;
+    if (!org || !selectedProject || !user) {
+      setLoading(false);
+      return;
+    }
 
     async function loadDevices() {
       setLoading(true);
@@ -146,7 +182,7 @@ export default function Devices() {
           {
             params: {
               organisationId: org!.organisationId,
-              projectId: project!._id,
+              projectId: selectedProject!._id,
             },
           },
           user!.token
@@ -155,19 +191,34 @@ export default function Devices() {
         if (!alive) return;
 
         setClusters(
-          data.projects?.flatMap(p => p.clusters || []) || []
+          data.projects?.flatMap(project => project.clusters || []) || []
         );
-      } catch (e: any) {
-        if (alive) setError(e.message);
+      } catch (e: unknown) {
+        if (alive) {
+          setError(
+            e instanceof Error ? e.message : 'Unable to load devices'
+          );
+        }
       } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setLoading(false);
+        }
       }
     }
 
     loadDevices();
-    return () => { alive = false; };
-  }, [org?.organisationId, project?._id, user?.token, refreshKey]);
 
+    return () => {
+      alive = false;
+    };
+  }, [
+    org?.organisationId,
+    selectedProject?._id,
+    user?.token,
+    refreshKey,
+  ]);
+
+  // Convert API devices into the list format used by the UI
   const liveDevices: ListDevice[] = useMemo(
     () =>
       clusters.flatMap(cluster =>
@@ -180,6 +231,7 @@ export default function Devices() {
     [clusters]
   );
 
+  // Switch between real and demo devices
   const devices: ListDevice[] = useMemo(
     () =>
       demo
@@ -191,6 +243,7 @@ export default function Devices() {
     [demo, liveDevices]
   );
 
+  // Search and status filtering
   const filteredDevices = useMemo(() => {
     return devices.filter(device => {
       const query = search.trim().toLowerCase();
@@ -227,7 +280,7 @@ export default function Devices() {
       refreshControl={
         <RefreshControl
           refreshing={false}
-          onRefresh={() => setRefreshKey(k => k + 1)}
+          onRefresh={() => setRefreshKey(key => key + 1)}
           tintColor={C.green}
         />
       }
@@ -239,6 +292,7 @@ export default function Devices() {
 
       <ModeSwitch demo={demo} onChange={setDemo} />
 
+      {/* Search */}
       <View style={styles.searchBar}>
         <Ionicons name="search-outline" size={21} color={C.muted} />
 
@@ -264,6 +318,7 @@ export default function Devices() {
         </Pressable>
       </View>
 
+      {/* Filters */}
       {showFilters && (
         <ScrollView
           horizontal
@@ -285,6 +340,7 @@ export default function Devices() {
         </ScrollView>
       )}
 
+      {/* Organization selector */}
       <Text style={styles.label}>ORGANIZATION</Text>
 
       <ScrollView
@@ -307,6 +363,7 @@ export default function Devices() {
         ))}
       </ScrollView>
 
+      {/* Project selector */}
       <Text style={styles.label}>PROJECT</Text>
 
       <ScrollView
@@ -317,10 +374,10 @@ export default function Devices() {
         {projects.map(item => (
           <Pressable
             key={item._id}
-            onPress={() => setProject(item)}
+            onPress={() => selectProject(item)}
             style={[
               styles.pill,
-              project?._id === item._id && styles.selected,
+              selectedProject?._id === item._id && styles.selected,
             ]}
           >
             <Text style={styles.pillText}>{item.name}</Text>
@@ -328,11 +385,14 @@ export default function Devices() {
         ))}
       </ScrollView>
 
+      {/* Current project */}
       <View style={styles.projectHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.label}>CURRENT PROJECT</Text>
           <Text style={styles.projectName}>
-            {demo ? 'Demo Devices' : project?.name || 'No project selected'}
+            {demo
+              ? 'Demo Devices'
+              : selectedProject?.name || 'No project selected'}
           </Text>
         </View>
 
@@ -341,6 +401,7 @@ export default function Devices() {
         </Text>
       </View>
 
+      {/* Demo mode notice */}
       {demo ? (
         <View style={styles.demoNote}>
           <Ionicons
@@ -356,6 +417,7 @@ export default function Devices() {
 
       {!demo && error ? <ErrorNote message={error} /> : null}
 
+      {/* Device states */}
       {!demo && loading ? (
         <Loading />
       ) : !demo && !org ? (
@@ -370,12 +432,20 @@ export default function Devices() {
           title="No projects yet"
           description="Create a project in Ginjer, then refresh."
         />
+      ) : !demo && !selectedProject ? (
+        <Empty
+          icon="folder-open-outline"
+          title="Select a project"
+          description="Choose a project to view its devices."
+        />
       ) : filteredDevices.length === 0 ? (
         <Empty
           icon="hardware-chip-outline"
-          title={search || statusFilter !== 'All'
-            ? 'No matching devices'
-            : 'No devices connected'}
+          title={
+            search || statusFilter !== 'All'
+              ? 'No matching devices'
+              : 'No devices connected'
+          }
           description={
             search || statusFilter !== 'All'
               ? 'Try a different search or filter.'
@@ -397,12 +467,12 @@ export default function Devices() {
                       demo: 'true',
                     },
                   });
-                } else if (project && org) {
+                } else if (selectedProject && org) {
                   router.push({
                     pathname: '/device/[id]',
                     params: {
                       id: device._id,
-                      projectId: project._id,
+                      projectId: selectedProject._id,
                       organisationId: org.organisationId,
                     },
                   });
@@ -423,8 +493,12 @@ export default function Devices() {
 
               <View style={styles.deviceInfo}>
                 <Text style={styles.deviceName}>{device.name}</Text>
+
                 <Text style={styles.deviceMeta}>
-                  {device.devEui || device.hardwareId || device.cluster || 'Device'}
+                  {device.devEui ||
+                    device.hardwareId ||
+                    device.cluster ||
+                    'Device'}
                 </Text>
 
                 <View style={styles.statusRow}>
@@ -434,6 +508,7 @@ export default function Devices() {
                       { backgroundColor: device.color || C.green },
                     ]}
                   />
+
                   <Text style={styles.statusText}>
                     {device.status || 'Registered'}
                   </Text>
@@ -450,6 +525,7 @@ export default function Devices() {
                 <Text style={styles.lastHeard}>
                   {device.lastHeard || device.timestamp || '—'}
                 </Text>
+
                 <Ionicons
                   name="chevron-forward"
                   size={19}
