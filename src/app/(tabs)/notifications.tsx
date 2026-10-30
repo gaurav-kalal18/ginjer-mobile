@@ -11,8 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenTitle, Empty } from '../../components/ui';
 import { C } from '../../theme';
+import { router } from 'expo-router';
+import { demoDevices } from '../../lib/demo-devices';
 
 type Mode = 'demo' | 'live';
+type Filter = 'all' | 'unread' | 'critical';
 type Severity = 'critical' | 'warning' | 'info' | 'success';
 
 type NotificationItem = {
@@ -92,6 +95,7 @@ const severityColors: Record<Severity, string> = {
 export default function NotificationsPage() {
   const [mode, setMode] = useState<Mode>('demo');
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
   const [notifications, setNotifications] =
     useState(initialNotifications);
 
@@ -100,12 +104,16 @@ export default function NotificationsPage() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return notifications.filter(n =>
-      `${n.title} ${n.message} ${n.device}`
+    return notifications.filter(n => {
+      const matchesSearch = `${n.title} ${n.message} ${n.device}`
         .toLowerCase()
-        .includes(query)
-    );
-  }, [notifications, search]);
+        .includes(query);
+      const matchesFilter = filter === 'all' ||
+        (filter === 'unread' && !n.read) ||
+        (filter === 'critical' && n.severity === 'critical');
+      return matchesSearch && matchesFilter;
+    });
+  }, [notifications, search, filter]);
 
   const markRead = (id: string) => {
     setNotifications(current =>
@@ -180,6 +188,29 @@ export default function NotificationsPage() {
             )}
           </View>
 
+          <View style={styles.demoBanner}>
+            <Ionicons name="information-circle-outline" size={19} color={C.greenDark} />
+            <Text style={styles.demoBannerText}>
+              Demo Mode — sample notifications, not live Ginjer events.
+            </Text>
+          </View>
+
+          <View style={styles.filterRow}>
+            {(['all', 'unread', 'critical'] as Filter[]).map(option => (
+              <Pressable
+                key={option}
+                accessibilityRole="button"
+                accessibilityState={{ selected: filter === option }}
+                onPress={() => setFilter(option)}
+                style={[styles.filterChip, filter === option && styles.filterChipActive]}
+              >
+                <Text style={[styles.filterText, filter === option && styles.filterTextActive]}>
+                  {option === 'all' ? 'All' : option === 'unread' ? 'Unread' : 'Critical'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
               {filtered.length} Notifications
@@ -197,13 +228,29 @@ export default function NotificationsPage() {
             <Empty
               icon="notifications-outline"
               title="No matching notifications"
-              description="Try a different search."
+              description="Try a different search or filter."
             />
           ) : (
             filtered.map(item => (
               <Pressable
                 key={item.id}
-                onPress={() => markRead(item.id)}
+                onPress={() => {
+  markRead(item.id);
+
+  const device = demoDevices.find(
+    d => d.name.toLowerCase() === item.device.toLowerCase()
+  );
+
+  if (device) {
+    router.push({
+      pathname: '/device/[id]',
+      params: {
+        id: device._id,
+        demo: 'true',
+      },
+    });
+  }
+}}
                 style={[
                   styles.card,
                   !item.read && styles.unreadCard,
@@ -262,9 +309,9 @@ export default function NotificationsPage() {
           )}
 
           <Text style={styles.demoNote}>
-            Demo notifications are simulated.
-            Tap an unread notification to mark it as read.
-          </Text>
+  Demo notifications are simulated.
+  Tap a notification to open its associated device.
+</Text>
         </>
       ) : (
         <Empty
@@ -290,6 +337,44 @@ const styles = StyleSheet.create({
     paddingTop: 55,
     paddingBottom: 45,
     gap: 13,
+  },
+  demoBanner: {
+    backgroundColor: C.greenPale,
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  demoBannerText: {
+    flex: 1,
+    color: C.greenDark,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterChip: {
+    paddingVertical: 9,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D7E8BA',
+    backgroundColor: C.white,
+  },
+  filterChipActive: {
+    backgroundColor: C.green,
+    borderColor: C.green,
+  },
+  filterText: {
+    color: C.greenDark,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterTextActive: {
+    color: C.white,
   },
   switchRow: {
     flexDirection: 'row',

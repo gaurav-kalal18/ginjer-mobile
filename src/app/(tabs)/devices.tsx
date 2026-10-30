@@ -34,7 +34,13 @@ type ListDevice = {
 };
 
 export default function Devices() {
-  const { user, org, selectOrg } = useSession();
+  const {
+    user,
+    org,
+    project: selectedProject,
+    selectOrg,
+    selectProject,
+  } = useSession();
 
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -42,6 +48,7 @@ export default function Devices() {
   const [clusters, setClusters] = useState<ProjectDevices['clusters']>([]);
 
   const [demo, setDemo] = useState(false);
+  const [viewMode, setViewMode] = useState<'compact' | 'expanded'>('compact');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -116,7 +123,16 @@ export default function Devices() {
 
         const list = data.projectOverview || [];
         setProjects(list);
-        setProject(list[0] || null);
+
+        const nextProject =
+          list.find(item => item._id === selectedProject?._id) ||
+          list[0] ||
+          null;
+
+        setProject(nextProject);
+        if (nextProject && nextProject._id !== selectedProject?._id) {
+          selectProject(nextProject);
+        }
       } catch (e: any) {
         if (alive) setError(e.message);
       } finally {
@@ -127,6 +143,16 @@ export default function Devices() {
     loadProjects();
     return () => { alive = false; };
   }, [org?.organisationId, user?.token, refreshKey]);
+
+  // Reflect project choices made on the Projects screen.
+  // This does not refetch the project list.
+  useEffect(() => {
+    if (!selectedProject || projects.length === 0) return;
+    const matching = projects.find(item => item._id === selectedProject._id);
+    if (matching) {
+      setProject(current => current?._id === matching._id ? current : matching);
+    }
+  }, [selectedProject?._id, projects]);
 
   // Load real devices
   useEffect(() => {
@@ -238,6 +264,22 @@ export default function Devices() {
       />
 
       <ModeSwitch demo={demo} onChange={setDemo} />
+
+      <Pressable
+        style={styles.automationShortcut}
+        onPress={() => router.push('/projects')}
+        accessibilityRole="button"
+        accessibilityLabel="Open Projects"
+      >
+        <View style={styles.automationIcon}>
+          <Ionicons name="folder-open-outline" size={23} color={C.greenDark} />
+        </View>
+        <View style={styles.automationInfo}>
+          <Text style={styles.automationTitle}>Projects</Text>
+          <Text style={styles.automationSubtitle}>View and switch Ginjer projects</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={C.greenDark} />
+      </Pressable>
       
 <Pressable
   style={styles.automationShortcut}
@@ -348,7 +390,10 @@ export default function Devices() {
         {projects.map(item => (
           <Pressable
             key={item._id}
-            onPress={() => setProject(item)}
+            onPress={() => {
+              setProject(item);
+              selectProject(item);
+            }}
             style={[
               styles.pill,
               project?._id === item._id && styles.selected,
@@ -370,6 +415,31 @@ export default function Devices() {
         <Text style={styles.deviceCount}>
           {filteredDevices.length} devices
         </Text>
+      </View>
+
+      <View style={styles.viewToolbar}>
+        <Text style={styles.viewLabel}>DEVICE VIEW</Text>
+        <View style={styles.viewToggle}>
+          {(['compact', 'expanded'] as const).map(mode => (
+            <Pressable
+              key={mode}
+              onPress={() => setViewMode(mode)}
+              accessibilityRole="button"
+              accessibilityLabel={`${mode} device view`}
+              accessibilityState={{ selected: viewMode === mode }}
+              style={[styles.viewOption, viewMode === mode && styles.viewOptionActive]}
+            >
+              <Ionicons
+                name={mode === 'compact' ? 'list-outline' : 'grid-outline'}
+                size={18}
+                color={viewMode === mode ? C.greenDark : C.muted}
+              />
+              <Text style={[styles.viewOptionText, viewMode === mode && styles.viewOptionTextActive]}>
+                {mode === 'compact' ? 'Compact' : 'Expanded'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {demo ? (
@@ -418,7 +488,7 @@ export default function Devices() {
           {filteredDevices.map(device => (
             <Pressable
               key={device._id}
-              style={styles.deviceCard}
+              style={[styles.deviceCard, viewMode === 'expanded' && styles.deviceCardExpanded]}
               onPress={() => {
                 if (device.isDemo) {
                   router.push({
@@ -475,9 +545,26 @@ export default function Devices() {
                     </Text>
                   )}
                 </View>
+                {viewMode === 'expanded' && (
+                  <View style={styles.expandedDetails}>
+                    <Text style={styles.expandedLine}>
+                      Device ID: {device.devEui || device.hardwareId || device._id}
+                    </Text>
+                    <Text style={styles.expandedLine}>
+                      Last heard: {device.lastHeard || device.timestamp || 'Not available'}
+                    </Text>
+                    {device.cluster ? (
+                      <Text style={styles.expandedLine}>Group: {device.cluster}</Text>
+                    ) : null}
+                    <View style={styles.detailsAction}>
+                      <Text style={styles.detailsActionText}>View Details</Text>
+                      <Ionicons name="arrow-forward" size={15} color={C.greenDark} />
+                    </View>
+                  </View>
+                )}
               </View>
 
-              <View style={styles.rightSide}>
+              {viewMode === 'compact' && <View style={styles.rightSide}>
                 <Text style={styles.lastHeard}>
                   {device.lastHeard || device.timestamp || '—'}
                 </Text>
@@ -486,7 +573,7 @@ export default function Devices() {
                   size={19}
                   color={C.greenDark}
                 />
-              </View>
+              </View>}
             </Pressable>
           ))}
         </View>
@@ -597,6 +684,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flex: 1,
   },
+  viewToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    gap: 10,
+  },
+  viewLabel: { fontSize: 11, fontWeight: '800', color: C.muted, letterSpacing: 1 },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: C.greenPale,
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  viewOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 9,
+  },
+  viewOptionActive: { backgroundColor: C.white, borderWidth: 1, borderColor: C.green },
+  viewOptionText: { fontSize: 12, fontWeight: '700', color: C.muted },
+  viewOptionTextActive: { color: C.greenDark },
+  deviceCardExpanded: { alignItems: 'flex-start', paddingVertical: 19 },
+  expandedDetails: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    gap: 7,
+  },
+  expandedLine: { fontSize: 12, color: C.muted },
+  detailsAction: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 7 },
+  detailsActionText: { fontSize: 12, fontWeight: '800', color: C.greenDark },
   deviceList: {
     gap: 11,
   },

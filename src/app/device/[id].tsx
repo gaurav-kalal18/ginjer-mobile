@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ScrollView,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  Animated,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +47,33 @@ export default function DeviceDetails() {
     useState<LightColor | null>(null);
   const [appliedColor, setAppliedColor] =
     useState<LightColor>('Off');
+
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!downlinkOpen || !selectedColor || selectedColor === 'Off') {
+      pulse.setValue(1);
+      return;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+    return () => animation.stop();
+  }, [downlinkOpen, selectedColor, pulse]);
 
   const p = useLocalSearchParams<{
     id: string;
@@ -466,11 +494,26 @@ export default function DeviceDetails() {
             )}
 
             <View style={styles.lightPreview}>
-              <Ionicons
-                name="bulb"
-                size={58}
-                color={previewHex}
-              />
+              <Animated.View
+                style={{
+                  transform: [{ scale: pulse }],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 90,
+                  height: 90,
+                  borderRadius: 45,
+                  backgroundColor:
+                    selectedColor && selectedColor !== 'Off'
+                      ? `${previewHex}20`
+                      : 'transparent',
+                }}
+              >
+                <Ionicons
+                  name={selectedColor === 'Off' ? 'bulb-outline' : 'bulb'}
+                  size={58}
+                  color={previewHex}
+                />
+              </Animated.View>
               <Text style={styles.previewLabel}>
                 {selectedColor
                   ? `Selected: ${selectedColor}`

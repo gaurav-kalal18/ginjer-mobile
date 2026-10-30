@@ -1,10 +1,176 @@
-import React,{useState} from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import React, { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
-import { Field, PrimaryButton, ErrorNote } from '../components/ui';
+import {
+  Field,
+  PrimaryButton,
+  ErrorNote,
+} from '../components/ui';
 import { useSession } from '../lib/session';
 import { C } from '../theme';
-export default function SignIn(){const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');const {signIn}=useSession();
-async function submit(){if(!email.trim()||!password){setError('Enter your email and password');return}setBusy(true);setError('');try{await signIn(email,password);router.replace('/(tabs)/devices')}catch(e:any){setError(e.message||'Could not sign in')}finally{setBusy(false)}}
-return <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==='ios'?'padding':undefined}><ScrollView contentContainerStyle={st.page} keyboardShouldPersistTaps="handled"><View style={st.mark}><Text style={st.markText}>G</Text></View><Text style={st.logo}>Ginjer</Text><Text style={st.tag}>Smart IoT Device Management</Text><View style={st.card}><Text style={st.heading}>Welcome back</Text><Text style={st.desc}>Sign in to manage your connected devices.</Text><Field label="Email address" value={email} onChangeText={setEmail} placeholder="name@example.com" keyboardType="email-address"/><Field label="Password" value={password} onChangeText={setPassword} placeholder="Enter your password" secureTextEntry/>{error?<ErrorNote message={error}/>:null}<PrimaryButton label="Sign in" onPress={submit} busy={busy}/></View><Text style={st.footer}>Powered by Ginjer</Text></ScrollView></KeyboardAvoidingView>}
-const st=StyleSheet.create({page:{flexGrow:1,justifyContent:'center',padding:25,maxWidth:510,width:'100%',alignSelf:'center'},mark:{width:75,height:75,backgroundColor:C.green,borderRadius:23,alignSelf:'center',alignItems:'center',justifyContent:'center'},markText:{color:C.white,fontSize:46,fontWeight:'800'},logo:{fontSize:38,fontWeight:'800',textAlign:'center',color:C.ink,marginTop:16},tag:{color:C.muted,textAlign:'center',fontSize:14,marginTop:4,marginBottom:35},card:{backgroundColor:C.white,borderRadius:24,padding:24,borderColor:C.line,borderWidth:1},heading:{fontSize:23,fontWeight:'800',color:C.ink},desc:{fontSize:14,color:C.muted,marginTop:6,marginBottom:26},footer:{textAlign:'center',color:C.muted,marginTop:30,fontSize:12}});
+
+export default function SignIn() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const { signIn } = useSession();
+
+  async function submit() {
+    if (!email.trim() || !password) {
+      setError('Enter your email and password');
+      return;
+    }
+
+    setBusy(true);
+    setError('');
+
+    try {
+      // Authenticate using the existing Ginjer API.
+      await signIn(email, password);
+
+      // After login, open Projects instead of Devices.
+      router.replace('/projects');
+    } catch (e: any) {
+      setError(e.message || 'Could not sign in');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={st.page}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={st.mark}>
+          <Text style={st.markText}>G</Text>
+        </View>
+
+        <Text style={st.logo}>Ginjer</Text>
+
+        <Text style={st.tag}>
+          Smart IoT Device Management
+        </Text>
+
+        <View style={st.card}>
+          <Text style={st.heading}>Welcome back</Text>
+
+          <Text style={st.desc}>
+            Sign in to access your Ginjer projects.
+          </Text>
+
+          <Field
+            label="Email address"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="name@example.com"
+            keyboardType="email-address"
+          />
+
+          <Field
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            secureTextEntry
+          />
+
+          {error ? <ErrorNote message={error} /> : null}
+
+          <PrimaryButton
+            label="Sign in"
+            onPress={submit}
+            busy={busy}
+          />
+        </View>
+
+        <Text style={st.footer}>Powered by Ginjer</Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const st = StyleSheet.create({
+  page: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 25,
+    maxWidth: 510,
+    width: '100%',
+    alignSelf: 'center',
+  },
+
+  mark: {
+    width: 75,
+    height: 75,
+    backgroundColor: C.green,
+    borderRadius: 23,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  markText: {
+    color: C.white,
+    fontSize: 46,
+    fontWeight: '800',
+  },
+
+  logo: {
+    fontSize: 38,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: C.ink,
+    marginTop: 16,
+  },
+
+  tag: {
+    color: C.muted,
+    textAlign: 'center',
+    fontSize: 14,
+    marginTop: 4,
+    marginBottom: 35,
+  },
+
+  card: {
+    backgroundColor: C.white,
+    borderRadius: 24,
+    padding: 24,
+    borderColor: C.line,
+    borderWidth: 1,
+  },
+
+  heading: {
+    fontSize: 23,
+    fontWeight: '800',
+    color: C.ink,
+  },
+
+  desc: {
+    fontSize: 14,
+    color: C.muted,
+    marginTop: 6,
+    marginBottom: 26,
+  },
+
+  footer: {
+    textAlign: 'center',
+    color: C.muted,
+    marginTop: 30,
+    fontSize: 12,
+  },
+});
